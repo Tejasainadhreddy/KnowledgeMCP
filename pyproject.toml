@@ -40,6 +40,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = [".", "tests"]
 markers = ["integration: needs a real Postgres with pgvector (set DATABASE_URL)"]
 filterwarnings = ["ignore::DeprecationWarning"]
 
