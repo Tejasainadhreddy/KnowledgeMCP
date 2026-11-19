@@ -7,6 +7,7 @@ the caller can see.
 from __future__ import annotations
 
 import asyncio
+import time
 from functools import lru_cache
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -40,9 +41,17 @@ def get_rag() -> RagService:
     return build_rag(settings(), get_store())
 
 
-@lru_cache(maxsize=1)
+_AUTH_TTL_S = 60.0
+_auth_cache: tuple[float, ApiKeyAuth] | None = None
+
+
 def get_auth() -> ApiKeyAuth:
-    return load_auth(settings())
+    """Reload keys every 60 s so keys added with scripts/create_api_key.py work without a redeploy."""
+    global _auth_cache
+    now = time.monotonic()
+    if _auth_cache is None or now - _auth_cache[0] > _AUTH_TTL_S:
+        _auth_cache = (now, load_auth(settings()))
+    return _auth_cache[1]
 
 
 def current_user(x_api_key: str | None = Header(default=None), auth: ApiKeyAuth = Depends(get_auth)) -> User:

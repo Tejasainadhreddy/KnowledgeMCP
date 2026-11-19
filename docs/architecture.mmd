@@ -1,0 +1,23 @@
+flowchart LR
+  subgraph Clients
+    CD["Claude Desktop / Claude Code<br/>(MCP client)"]
+    APP["Apps / curl"]
+  end
+  MCP["KnowledgeMCP MCP server<br/>tools: ask_question, search_documents, list_documents<br/>resources: doc://{id}"]
+  CD -- stdio --> MCP
+  MCP -- "HTTPS + x-api-key" --> APIGW
+  APP -- "HTTPS + x-api-key" --> APIGW
+
+  subgraph AWS["AWS (us-west-2)"]
+    APIGW["API Gateway HTTP API<br/>(throttled)"] --> API["Lambda: FastAPI<br/>auth → guardrails → hybrid search → rerank → Claude"]
+    SM[("Secrets Manager<br/>hashed API keys")] -.-> API
+    S3[("S3 bucket<br/>team/file.pdf|md|txt")] -- "ObjectCreated / Removed" --> ING["Lambda: ingest<br/>parse → chunk → embed"]
+    ING -- "RDS Data API" --> DB[("Aurora PostgreSQL Serverless v2<br/>pgvector + full-text<br/>scales to 0 ACU")]
+    API -- "RDS Data API<br/>(team-filtered SQL)" --> DB
+    ING --> TITAN["Bedrock<br/>Titan Embeddings v2"]
+    API --> TITAN
+    API --> RR["Bedrock<br/>Amazon Rerank 1.0"]
+    API --> CLAUDE["Bedrock<br/>Claude"]
+    API -. "logs, EMF metrics, X-Ray" .-> CW["CloudWatch<br/>dashboard + budget alert"]
+    ING -.-> CW
+  end

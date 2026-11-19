@@ -1,0 +1,35 @@
+$ curl -s localhost:8000/ask -H "x-api-key: $HR_KEY" -d '{"question":"How many vacation days can I carry over?"}' | jq
+{
+  "answer": "Employees may carry over up to 5 unused vacation days into the next calendar year [S1].",
+  "citations": [
+    {
+      "ref": "S1",
+      "doc_id": "fbfbc08bbf636cef",
+      "title": "Paid Time Off Policy",
+      "location": "section 'Paid Time Off Policy > Vacation'",
+      "chunk_id": "fbfbc08bbf636cef:0"
+    }
+  ],
+  "refused": false,
+  "latency_ms": 8.22,
+  "steps_ms": {
+    "guard_input": 0.14,
+    "embed_query": 0.1,
+    "vector_search": 3.77,
+    "keyword_search": 3.31,
+    "rerank": 0.26,
+    "guard_sources": 0.17,
+    "llm": 0.2,
+    "guard_output": 0.09
+  }
+}
+
+# Same question, engineering key (no HR access):
+{
+  "answer": "I couldn't find this in the documents you have access to.",
+  "refused": true,
+  "reason": "not_in_sources"
+}
+
+# Prompt injection attempt:
+{"error":"prompt_injection","message":"The question looks like an attempt to override instructions."}

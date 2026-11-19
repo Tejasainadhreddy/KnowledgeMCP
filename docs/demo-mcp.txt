@@ -1,0 +1,22 @@
+Tools: search_documents, ask_question, list_documents
+
+> ask_question('How much traffic does a canary deploy get, and for how long?')
+{
+  "answer": "Production deploys start as a canary that receives 5 percent of traffic for 20 minutes [S1].",
+  "refused": false,
+  "citations": [
+    {
+      "ref": "S1",
+      "title": "Deployment Guide",
+      "location": "section 'Deployment Guide > Canary releases'",
+      "doc_id": "bd7d83dd0dba4167"
+    }
+  ]
+}
+
+> ask_question('How many weeks of parental leave do we get?')   # engineering key, HR doc
+{
+  "answer": "I couldn't find this in the documents you have access to.",
+  "refused": true,
+  "citations": []
+}
