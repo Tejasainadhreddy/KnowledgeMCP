@@ -6,6 +6,7 @@ the caller can see.
 
 from __future__ import annotations
 
+import asyncio
 from functools import lru_cache
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -111,4 +112,8 @@ _mangum = Mangum(app, lifespan="off")
 @metrics.log_metrics
 @tracer.capture_lambda_handler
 def handler(event, context):
+    try:  # Mangum needs a current event loop; recreate it if something closed it
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
     return _mangum(event, context)
