@@ -1,6 +1,6 @@
 # KnowledgeMCP
 
-[![CI](https://github.com/TEJASAI1818/KnowledgeMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/TEJASAI1818/KnowledgeMCP/actions/workflows/ci.yml)
+[![CI](https://github.com/Tejasainadhreddy/KnowledgeMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tejasainadhreddy/KnowledgeMCP/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![AWS CDK](https://img.shields.io/badge/IaC-AWS%20CDK%20(Python)-orange)
 ![MCP](https://img.shields.io/badge/MCP-server-7aa2ff)
