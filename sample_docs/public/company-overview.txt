@@ -1,0 +1,5 @@
+Northwind Labs is a fictional software company used for this demo. It builds logistics software for small shipping companies.
+
+The company was founded in 2019 and has offices in Oakland, California and Austin, Texas. It has about 240 employees across engineering, sales, finance and people operations.
+
+The customer support team is available Monday to Friday from 7:00 to 19:00 Pacific time at support@northwind.example.
