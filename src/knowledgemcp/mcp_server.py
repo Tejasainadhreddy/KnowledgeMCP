@@ -166,6 +166,9 @@ def backend_from_env() -> Backend:
 
 
 def main() -> None:
+    import logging
+
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # stdout/stderr stay clean for MCP clients
     create_server(backend_from_env()).run("stdio")
 
 
