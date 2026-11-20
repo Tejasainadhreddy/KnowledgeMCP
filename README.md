@@ -11,6 +11,25 @@ Upload PDFs, Markdown or text files to S3. Ask questions from Claude Desktop, Cl
 and get answers with citations (document + page/section). Each user only sees answers from the
 documents their team may read. If the answer isn't in those documents, it says so instead of guessing.
 
+## Status (November 2026): code complete, not yet deployed
+
+**Works and is tested**
+- Ingestion, hybrid search, team access control, guardrails, cited answers, REST API and MCP server: 50 tests, including an integration test against real Postgres + pgvector.
+- CDK synth tests (7) and a Docker image build run in CI on every push.
+- The preview below is a real local run (Postgres + pgvector, offline stand-in models).
+
+**Not proven yet**
+- `cdk deploy` has never been run, so the AWS stack itself is untested.
+- Bedrock calls (Titan embeddings, Amazon Rerank, Claude) are only tested against recorded responses, never the real models.
+- pgvector queries through the RDS Data API have not been run against Aurora (only over a direct Postgres connection).
+- No quality numbers yet: recall, faithfulness, latency and cost will be measured on the deployed stack.
+
+**Known issues**
+- After Aurora auto-pauses, the first request waits about 15 s for it to resume; with model time added it may hit API Gateway's 30 s limit.
+- Prompt-injection detection is pattern-based, so reworded attacks can get through (team filtering in SQL still limits what the model can see).
+- Filtered vector search can return fewer than `k` results when a team owns few chunks.
+- The offline stand-in models used in tests and local runs give weak answers; they only check the plumbing.
+
 ![KnowledgeMCP preview](docs/preview.png)
 
 ## What it does
