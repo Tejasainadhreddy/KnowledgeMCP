@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .auth import ApiKeyAuth, load_auth
+from .db import DatabaseWaking
 from .guardrails import GuardrailViolation
 from .models import User
 from .observability import add_metric, logger, metrics, tracer
@@ -75,6 +76,24 @@ async def guardrail_error(_: Request, exc: GuardrailViolation):
     add_metric("GuardrailBlocks", 1)
     logger.warning("guardrail blocked request", extra={"code": exc.code})
     return JSONResponse(status_code=400, content={"error": exc.code, "message": exc.message})
+
+
+WARMING_RETRY_S = 10
+
+
+@app.exception_handler(DatabaseWaking)
+async def database_waking(_: Request, exc: DatabaseWaking):
+    add_metric("WarmingUp503", 1)
+    return JSONResponse(
+        status_code=503, headers={"Retry-After": str(WARMING_RETRY_S)},
+        content={"error": "warming_up", "retry_after_s": WARMING_RETRY_S,
+                 "message": "The knowledge base is waking up after being idle. Retry in about 10 seconds."})
+
+
+@app.post("/warmup")
+def warmup(user: User = Depends(current_user), store: Store = Depends(get_store)):
+    """Start resuming the database without waiting for it. Clients call this ahead of real questions."""
+    return {"database": "ready" if store.ping() else "resuming"}
 
 
 @app.get("/health")

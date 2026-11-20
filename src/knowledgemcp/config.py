@@ -32,6 +32,8 @@ class Settings:
     db_cluster_arn: str = field(default_factory=lambda: _env("DB_CLUSTER_ARN"))
     db_secret_arn: str = field(default_factory=lambda: _env("DB_SECRET_ARN"))
     db_name: str = field(default_factory=lambda: _env("DB_NAME", "kmcp"))
+    # How long to wait for a paused Aurora cluster to resume (API: short, so it can answer 503 in time)
+    db_resume_wait_s: float = field(default_factory=lambda: float(_env("DB_RESUME_WAIT_S", "60")))
 
     # Models: "bedrock" on AWS; "hash"/"fake"/"lexical" are offline stand-ins for tests and local dev
     embedder: str = field(default_factory=lambda: _env("EMBEDDER", "hash"))

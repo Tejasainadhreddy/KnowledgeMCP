@@ -41,9 +41,15 @@ def data_api_param(name: str, value: Any) -> dict[str, Any]:
     return {"name": name, "value": field}
 
 
+class DatabaseWaking(RuntimeError):
+    """Aurora is resuming from auto-pause and did not finish within this caller's wait budget."""
+
+
 class DataApiExecutor:
     # Aurora Serverless v2 with min 0 ACU pauses when idle. The first call after a pause fails with
-    # DatabaseResumingException while it wakes up (~15 s), so we retry with backoff.
+    # DatabaseResumingException while it wakes up (~15 s), so we retry with backoff, but only within a
+    # budget: the API Lambda must answer before API Gateway's 30 s limit, so it gives up early and the API
+    # returns 503 "warming up" instead of timing out. Ingest/migrate Lambdas use a longer budget.
     RETRYABLE = ("DatabaseResumingException", "StatementTimeoutException", "ServiceUnavailableError")
 
     def __init__(self, client, cluster_arn: str, secret_arn: str, database: str,
@@ -63,11 +69,28 @@ class DataApiExecutor:
                           database=self.database, **kwargs)
             except Exception as exc:  # botocore ClientError
                 code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
-                if code not in self.RETRYABLE or waited >= self.max_wait_s:
+                if code not in self.RETRYABLE:
                     raise
-                self.sleep(delay)
-                waited += delay
+                remaining = self.max_wait_s - waited
+                if remaining <= 0:
+                    if code == "DatabaseResumingException":
+                        raise DatabaseWaking("database is resuming from auto-pause") from exc
+                    raise
+                pause = min(delay, remaining)  # never sleep past the budget
+                self.sleep(pause)
+                waited += pause
                 delay = min(delay * 2, 8.0)
+
+    def ping(self) -> bool:
+        """One attempt, no waiting. Starts a resume if the cluster is paused. True if the database answered."""
+        try:
+            self.client.execute_statement(resourceArn=self.cluster_arn, secretArn=self.secret_arn,
+                                          database=self.database, sql="SELECT 1")
+            return True
+        except Exception as exc:
+            if getattr(exc, "response", {}).get("Error", {}).get("Code", "") == "DatabaseResumingException":
+                return False
+            raise
 
     def execute(self, sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         resp = self._call(
@@ -103,3 +126,7 @@ class PsycopgExecutor:
     def execute_many(self, sql: str, param_sets: list[dict[str, Any]]) -> None:
         with self.conn.cursor() as cur:
             cur.executemany(to_pyformat(sql), param_sets)
+
+    def ping(self) -> bool:
+        self.execute("SELECT 1")
+        return True

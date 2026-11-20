@@ -52,3 +52,15 @@ def test_budget_only_when_email_given():
 
 def test_dashboard_exists():
     synth().resource_count_is("AWS::CloudWatch::Dashboard", 1)
+
+
+def test_api_waits_less_for_aurora_than_background_jobs():
+    t = synth()
+    fns = t.find_resources("AWS::Lambda::Function", {"Properties": {"PackageType": "Image"}})
+    waits = sorted(f["Properties"]["Environment"]["Variables"]["DB_RESUME_WAIT_S"] for f in fns.values())
+    assert waits == ["15", "240", "240"]
+
+
+def test_auto_pause_is_configurable():
+    synth(auto_pause_minutes=45).has_resource_properties("AWS::RDS::DBCluster", {
+        "ServerlessV2ScalingConfiguration": Match.object_like({"SecondsUntilAutoPause": 2700})})

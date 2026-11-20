@@ -15,6 +15,7 @@ KnowledgeMcpStack(
     app, "KnowledgeMcpStack",
     alert_email=app.node.try_get_context("alert_email"),
     llm_model_id=app.node.try_get_context("llm_model_id") or "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    auto_pause_minutes=int(app.node.try_get_context("auto_pause_minutes") or 10),
     env=cdk.Environment(account=os.environ.get("CDK_DEFAULT_ACCOUNT"),
                         region=os.environ.get("CDK_DEFAULT_REGION", "us-west-2")),
 )

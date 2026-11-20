@@ -17,6 +17,7 @@ from .models import Chunk, Document, Hit
 
 class Store(Protocol):
     def ensure_schema(self) -> None: ...
+    def ping(self) -> bool: ...
     def get_content_hash(self, doc_id: str) -> str | None: ...
     def upsert_document(self, doc: Document, chunks: list[Chunk], vectors: list[list[float]]) -> None: ...
     def delete_document(self, doc_id: str) -> None: ...
@@ -81,6 +82,9 @@ class PgVectorStore:
     def ensure_schema(self) -> None:
         for stmt in schema_statements(self.dim):
             self.db.execute(stmt)
+
+    def ping(self) -> bool:
+        return self.db.ping()
 
     def get_content_hash(self, doc_id: str) -> str | None:
         rows = self.db.execute("SELECT content_hash FROM documents WHERE doc_id = :doc_id", {"doc_id": doc_id})
@@ -167,6 +171,9 @@ class InMemoryStore:
 
     def ensure_schema(self) -> None:
         pass
+
+    def ping(self) -> bool:
+        return True
 
     def get_content_hash(self, doc_id: str) -> str | None:
         doc = self.docs.get(doc_id)
