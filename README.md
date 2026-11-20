@@ -14,8 +14,8 @@ documents their team may read. If the answer isn't in those documents, it says s
 ## Status (November 2026): code complete, not yet deployed
 
 **Works and is tested**
-- Ingestion, hybrid search, team access control, guardrails, cited answers, REST API and MCP server: 50 tests, including an integration test against real Postgres + pgvector.
-- CDK synth tests (7) and a Docker image build run in CI on every push.
+- Ingestion, hybrid search, team access control, guardrails, cited answers, REST API and MCP server: 56 tests, including an integration test against real Postgres + pgvector.
+- CDK synth tests (9) and a Docker image build run in CI on every push.
 - The preview below is a real local run (Postgres + pgvector, offline stand-in models).
 
 **Not proven yet**
@@ -23,9 +23,10 @@ documents their team may read. If the answer isn't in those documents, it says s
 - Bedrock calls (Titan embeddings, Amazon Rerank, Claude) are only tested against recorded responses, never the real models.
 - pgvector queries through the RDS Data API have not been run against Aurora (only over a direct Postgres connection).
 - No quality numbers yet: recall, faithfulness, latency and cost will be measured on the deployed stack.
+- The cold-start handling is tested with mocks only; the real Aurora resume time on AWS has not been measured.
 
 **Known issues**
-- After Aurora auto-pauses, the first request waits about 15 s for it to resume; with model time added it may hit API Gateway's 30 s limit.
+- After Aurora auto-pauses, the first request can't be answered right away. The API now replies `503 warming_up` with `Retry-After: 10` within about 15 s (instead of timing out at API Gateway's 30 s limit), and the MCP server waits and retries for up to 45 s. Call `POST /warmup` ahead of real questions, or deploy with `-c auto_pause_minutes=60` for fewer cold starts at the cost of more paid idle time.
 - Prompt-injection detection is pattern-based, so reworded attacks can get through (team filtering in SQL still limits what the model can see).
 - Filtered vector search can return fewer than `k` results when a team owns few chunks.
 - The offline stand-in models used in tests and local runs give weak answers; they only check the plumbing.
@@ -101,7 +102,7 @@ pip install -e ".[dev,local]"
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kmcp
 python -m knowledgemcp.cli ingest sample_docs
 python -m knowledgemcp.cli ask "How many vacation days can I carry over?" --teams hr
-pytest -q                        # 50 tests (includes the pgvector integration test)
+pytest -q                        # 56 tests (includes the pgvector integration test)
 ```
 
 Local mode uses offline stand-ins (word-hash embeddings, an extractive "LLM", lexical re-ranker) so everything
@@ -129,6 +130,9 @@ python ../scripts/create_api_key.py --user teja --teams hr,engineering,finance -
 curl -s <ApiUrl>/ask -H "x-api-key: kmcp_..." -H "content-type: application/json" \
   -d '{"question": "Who approves expenses above 1,000 US dollars?"}'
 ```
+
+After an idle period the database is paused, so the first call may return `503 warming_up` for a few seconds.
+`curl -X POST <ApiUrl>/warmup -H "x-api-key: kmcp_..."` starts it waking without waiting.
 
 Tear everything down with `cdk destroy`.
 
