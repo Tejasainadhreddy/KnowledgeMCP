@@ -34,7 +34,8 @@ SERVICE = "knowledgemcp"
 
 class KnowledgeMcpStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, *, alert_email: str | None = None,
-                 llm_model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0", **kwargs) -> None:
+                 llm_model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                 auto_pause_minutes: int = 10, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         Tags.of(self).add("Project", "KnowledgeMCP")
 
@@ -47,7 +48,8 @@ class KnowledgeMcpStack(Stack):
             writer=rds.ClusterInstance.serverless_v2("writer"),
             serverless_v2_min_capacity=0,
             serverless_v2_max_capacity=2,
-            serverless_v2_auto_pause_duration=Duration.minutes(10),
+            # Longer pause delay = fewer cold starts but more paid idle time. Allowed: 5 min to 24 h.
+            serverless_v2_auto_pause_duration=Duration.minutes(auto_pause_minutes),
             enable_data_api=True,
             default_database_name="kmcp",
             credentials=rds.Credentials.from_generated_secret("kmcp_admin"),
@@ -97,6 +99,8 @@ class KnowledgeMcpStack(Stack):
         }
 
         def function(fid: str, cmd: str, timeout: Duration, extra_env: dict | None = None) -> lambda_.Function:
+            # Background jobs can wait for a paused database; the API answers 503 "warming up" instead.
+            extra_env = {"DB_RESUME_WAIT_S": "240", **(extra_env or {})}
             log_group = logs.LogGroup(self, f"{fid}Logs", retention=logs.RetentionDays.TWO_WEEKS,
                                       removal_policy=RemovalPolicy.DESTROY)
             fn = lambda_.DockerImageFunction(
@@ -111,8 +115,9 @@ class KnowledgeMcpStack(Stack):
             resources=["arn:aws:bedrock:*::foundation-model/*",
                        f"arn:aws:bedrock:*:{self.account}:inference-profile/*"])
 
+        # API Gateway stops waiting at 30 s, so the API waits at most 15 s for Aurora to resume.
         api_fn = function("ApiFunction", "knowledgemcp.api.handler", Duration.seconds(29),
-                          {"API_KEYS_SECRET_ARN": api_keys.secret_arn})
+                          {"API_KEYS_SECRET_ARN": api_keys.secret_arn, "DB_RESUME_WAIT_S": "15"})
         api_fn.add_to_role_policy(bedrock_invoke)
         api_fn.add_to_role_policy(iam.PolicyStatement(actions=["bedrock:Rerank"], resources=["*"]))
         api_keys.grant_read(api_fn)

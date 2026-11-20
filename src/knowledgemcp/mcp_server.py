@@ -12,6 +12,7 @@ For local development without AWS you can run it in-process instead:
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Protocol
 
 import httpx
@@ -54,19 +55,45 @@ class Backend(Protocol):
     def get_document(self, doc_id: str) -> dict | None: ...
 
 
+class KnowledgeBaseWarmingUp(RuntimeError):
+    """The API kept answering 503 warming_up for longer than this client's wait budget."""
+
+
 class HttpBackend:
-    def __init__(self, base_url: str, api_key: str, client: httpx.Client | None = None):
+    """Calls the KnowledgeMCP API. While the database wakes up (503 warming_up), it waits and retries,
+    but only for `wait_budget_s` (env KMCP_WAIT_BUDGET_S). Desktop clients can wait ~45 s; a caller with
+    its own deadline (like a Lambda) should pass a small budget and handle KnowledgeBaseWarmingUp."""
+
+    def __init__(self, base_url: str, api_key: str, client: httpx.Client | None = None,
+                 wait_budget_s: float | None = None, sleep=time.sleep):
         self.client = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=60.0)
         self.headers = {"x-api-key": api_key}
+        self.wait_budget_s = float(os.environ.get("KMCP_WAIT_BUDGET_S", "45")) if wait_budget_s is None \
+            else wait_budget_s
+        self.sleep = sleep
 
     def _call(self, method: str, path: str, **kw) -> Any:
-        resp = self.client.request(method, path, headers=self.headers, **kw)
-        if resp.status_code == 404:
-            return None
-        if resp.status_code == 400:
-            raise ValueError(resp.json().get("message", "Request blocked by guardrail"))
-        resp.raise_for_status()
-        return resp.json()
+        waited = 0.0
+        while True:
+            resp = self.client.request(method, path, headers=self.headers, **kw)
+            if resp.status_code == 503 and resp.json().get("error") == "warming_up":
+                remaining = self.wait_budget_s - waited
+                if remaining <= 0:
+                    raise KnowledgeBaseWarmingUp(
+                        "warming_up: the knowledge base is waking up after being idle; try again shortly")
+                pause = min(float(resp.json().get("retry_after_s", 10)), remaining)
+                self.sleep(pause)
+                waited += pause
+                continue
+            if resp.status_code == 404:
+                return None
+            if resp.status_code == 400:
+                raise ValueError(resp.json().get("message", "Request blocked by guardrail"))
+            resp.raise_for_status()
+            return resp.json()
+
+    def warmup(self) -> str:
+        return self.client.post("/warmup", headers=self.headers).json().get("database", "unknown")
 
     def search(self, query, top_k):
         return self._call("POST", "/search", json={"query": query, "top_k": top_k})

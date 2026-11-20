@@ -19,7 +19,8 @@ from .store import PgVectorStore, Store
 def build_store(s: Settings) -> Store:
     if s.db_mode == "dataapi":
         executor = DataApiExecutor(boto3.client("rds-data", region_name=s.region),
-                                   s.db_cluster_arn, s.db_secret_arn, s.db_name)
+                                   s.db_cluster_arn, s.db_secret_arn, s.db_name,
+                                   max_wait_s=s.db_resume_wait_s)
     else:
         executor = PsycopgExecutor(s.database_url)
     return PgVectorStore(executor, dim=s.embed_dim)
